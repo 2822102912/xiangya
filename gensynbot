@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# ---------- 错误处理 ----------
-trap 'echo -e "\n❌ 脚本执行出错（行: $LINENO）。退出。"; exit 1' ERR
+# ---------- 错误处理（去掉 $LINENO，避免 set -u 环境触发 unbound） ----------
+trap 'echo -e "\n❌ 脚本执行出错，已中止。"; exit 1' ERR
 
 # ---------- 配置与默认值 ----------
 # 权限级别：不再做口令验证，直接默认 full（可外部覆盖）
@@ -87,7 +87,6 @@ if [[ "$OS_TYPE" == "macos" ]]; then
     brew_name="${brew_names[$i]}"
     if ! command -v "$dep" &>/dev/null; then
       echo "📥 brew install $brew_name ..."
-      # 重试安装，避免偶发网络失败
       until brew install "$brew_name"; do
         echo "⚠️ $brew_name 安装失败，3秒后重试..."
         sleep 3
@@ -116,7 +115,6 @@ if [[ $- == *i* ]]; then
 fi
 EOF
   fi
-  # 让当前会话尽可能感知最新 PATH
   # shellcheck disable=SC1090
   source ~/.zshrc || true
 
@@ -167,7 +165,6 @@ else
     yarn -v || true
   fi
 
-  # 写入 python alias（与原逻辑保持）
   PYTHON_ALIAS="# Python3.12 Environment Setup"
   if ! grep -q "$PYTHON_ALIAS" ~/.bashrc 2>/dev/null; then
     cat << 'EOF' >> ~/.bashrc
@@ -191,7 +188,7 @@ ensure_p2pd() {
     echo "✅ p2pd 已安装：$(command -v p2pd)"
     return 0
   fi
-  echo "📥 安装 p2pd (go-libp2p-daemon)..."
+  echo "📥 安装 p2pd (go-libp2p-daemon/p2pd)..."
   # 需要 go
   if ! command -v go &>/dev/null; then
     if [[ "$OS_TYPE" == "macos" ]]; then
@@ -203,7 +200,8 @@ ensure_p2pd() {
     fi
   fi
   mkdir -p "$HOME/.local/bin"
-  GOBIN="$HOME/.local/bin" go install github.com/libp2p/go-libp2p-daemon@latest
+  # 关键修正：安装子包 /p2pd（才是 main 包）
+  GOBIN="$HOME/.local/bin" GO111MODULE=on go install github.com/libp2p/go-libp2p-daemon/p2pd@latest
   # 加 PATH
   if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
     if [[ "$OS_TYPE" == "macos" ]]; then
@@ -333,7 +331,7 @@ EOF
     chmod +x "$DESKTOP_DIR/$cmd_name"
   done
 
-  # dria.command（仅在 full 权限时生成更合理）
+  # dria.command（仅在 full 权限时生成）
   if [[ "$GENSYN_PERMISSION" == "full" ]]; then
     cat > "$DESKTOP_DIR/dria.command" <<'EOF'
 #!/bin/bash
